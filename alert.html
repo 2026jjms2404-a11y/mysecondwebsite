@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오늘의 포춘쿠키 - 리얼 행운 시뮬레이터</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Gowun Batang, Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti for paper explosion -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #121214;
+            overscroll-behavior: none;
+        }
+        .serif-font {
+            font-family: 'Gowun Batang', serif;
+        }
+        
+        /* Gentle bobbing cookie container */
+        @keyframes gentle-bob {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-6px) rotate(0.5deg); }
+        }
+        .animate-bob {
+            animation: gentle-bob 3s ease-in-out infinite;
+        }
+
+        /* Crack-shake trigger (feels crisp and lightweight) */
+        @keyframes crisp-shake {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            15% { transform: scale(1.05) rotate(-5deg); }
+            30% { transform: scale(1.05) rotate(5deg); }
+            45% { transform: scale(1.02) rotate(-3deg); }
+            60% { transform: scale(1.02) rotate(3deg); }
+            80% { transform: scale(1) rotate(0deg); }
+        }
+        .animate-shake {
+            animation: crisp-shake 0.35s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        /* Thin biscuit physical split without complex 3D gradients */
+        .cookie-left {
+            transition: transform 0.6s cubic-bezier(0.25, 1, 0.3, 1), opacity 0.5s ease;
+            transform-origin: 35% 45%;
+        }
+        .cookie-right {
+            transition: transform 0.6s cubic-bezier(0.25, 1, 0.3, 1), opacity 0.5s ease;
+            transform-origin: 65% 45%;
+        }
+        
+        /* Split cookie animation classes */
+        .cracked .cookie-left {
+            transform: translateX(-120px) translateY(30px) rotate(-35deg);
+            opacity: 0.15;
+            pointer-events: none;
+        }
+        .cracked .cookie-right {
+            transform: translateX(120px) translateY(30px) rotate(35deg);
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        /* Outer paper slip style */
+        .glow-paper {
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* Unrolling / Revealing paper slip animation */
+        @keyframes paper-emerge {
+            0% { transform: translate(-50%, -30%) scale(0.1) rotate(-10deg); opacity: 0; }
+            50% { opacity: 0.95; }
+            100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+        }
+        .animate-paper-emerge {
+            animation: paper-emerge 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.15) forwards;
+        }
+
+        /* Star backdrop */
+        .space-star {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.12);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col justify-between overflow-x-hidden relative">
+
+    <div id="stars-backdrop" class="absolute inset-0 overflow-hidden pointer-events-none z-0"></div>
+
+    <!-- Header navigation -->
+    <header class="w-full max-w-6xl mx-auto px-6 py-4 flex justify-between items-center z-10 relative">
+        <div class="flex items-center space-x-2.5 cursor-pointer" onclick="resetCookieState()">
+            <div class="bg-amber-500 p-2.5 rounded-xl shadow-lg">
+                <i class="fa-solid fa-cookie-bite text-slate-950 text-xl"></i>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-base font-black tracking-wider text-amber-400 leading-none">GOLDEN COOKIE</span>
+                <span class="text-[9px] text-amber-500/70 uppercase tracking-widest font-bold mt-1">Simple Fortune Cookie</span>
+            </div>
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="toggleHistoryModal(true)" class="bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-amber-400 px-4 py-2.5 rounded-xl transition duration-200 flex items-center space-x-2 border border-slate-800 shadow-md">
+                <i class="fa-solid fa-bookmark text-amber-400"></i>
+                <span class="text-xs font-semibold">행운 보관함</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow flex flex-col justify-center items-center px-4 py-4 z-10 max-w-lg mx-auto w-full relative">
+        
+        <!-- Header Text -->
+        <div class="text-center mb-6" id="intro-texts">
+            <span class="text-[10px] font-bold tracking-widest text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">SIMPLE & CLEAN</span>
+            <h1 class="text-3xl font-black mt-3.5 tracking-tight serif-font text-amber-200">
+                오늘의 포춘쿠키
+            </h1>
+            <p class="text-slate-400 text-xs mt-2.5 font-light leading-relaxed">
+                구질구질한 입체 그래픽을 뺀 맑고 담백한 플랫 포춘쿠키입니다.<br>
+                터치하여 아그작! 소리와 함께 숨겨진 메시지를 열어보세요.
+            </p>
+        </div>
+
+        <!-- Category Selector Grid -->
+        <div class="w-full max-w-sm mb-6 grid grid-cols-4 gap-2 px-1" id="category-selector">
+            <button onclick="selectCategory('all')" id="cat-all" class="category-btn active py-3 rounded-xl border flex flex-col items-center justify-center transition-all bg-amber-500/20 border-amber-500/60 text-amber-200">
+                <i class="fa-solid fa-wand-magic-sparkles text-base mb-1"></i>
+                <span class="text-[11px] font-bold">종합운</span>
+            </button>
+            <button onclick="selectCategory('love')" id="cat-love" class="category-btn py-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 flex flex-col items-center justify-center transition-all hover:text-pink-300 hover:border-pink-500/30">
+                <i class="fa-solid fa-heart text-base mb-1"></i>
+                <span class="text-[11px] font-medium">연애운</span>
+            </button>
+            <button onclick="selectCategory('wealth')" id="cat-wealth" class="category-btn py-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 flex flex-col items-center justify-center transition-all hover:text-emerald-300 hover:border-emerald-500/30">
+                <i class="fa-solid fa-coins text-base mb-1"></i>
+                <span class="text-[11px] font-medium">재물운</span>
+            </button>
+            <button onclick="selectCategory('career')" id="cat-career" class="category-btn py-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 flex flex-col items-center justify-center transition-all hover:text-blue-300 hover:border-blue-500/30">
+                <i class="fa-solid fa-graduation-cap text-base mb-1"></i>
+                <span class="text-[11px] font-medium">성공운</span>
+            </button>
+        </div>
+
+        <!-- Interactive Simplified Flat SVG Fortune Cookie Container -->
+        <div class="relative w-80 h-64 flex items-center justify-center my-1" id="cookie-container">
+            <!-- Background Simple Soft Glow -->
+            <div id="cookie-glow" class="absolute w-36 h-36 rounded-full bg-amber-500/5 blur-2xl"></div>
+
+            <!-- Crisp flat vector cookie - purely clean solid tones based on true shape -->
+            <div id="cookie-interactive" onclick="crackCookie()" class="relative w-72 h-56 cursor-pointer select-none z-10 transition-transform active:scale-95 animate-bob flex items-center justify-center">
+                <svg class="w-full h-full drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)]" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- LEFT HALF: Flat Solid Shapes representing the real curved fold of a fortune cookie -->
+                    <g class="cookie-left">
+                        <!-- Main Left Wing Structure (Perfectly curved inverted crescent) -->
+                        <path d="M 160,50 
+                                 C 110,48 65,95 55,140 
+                                 C 48,170 65,200 90,198 
+                                 C 110,196 122,176 138,148 
+                                 C 150,126 158,102 160,90 Z" 
+                              fill="#E8B068" />
+                        <!-- Subtle inner block shade (flat color, no gradients!) -->
+                        <path d="M 160,90 
+                                 C 142,112 124,124 104,130
+                                 C 100,145 88,165 72,175
+                                 C 82,185 92,192 100,191
+                                 C 120,189 135,160 148,135 Z" 
+                              fill="#CE934A" />
+                        <!-- Bright outer flat crust highlight rim -->
+                        <path d="M 55,140 C 60,165 80,190 90,198" stroke="#F6D5A8" stroke-width="3" stroke-linecap="round" />
+                    </g>
+
+                    <!-- RIGHT HALF: Mirrored structure representing the fold of the dough sheet -->
+                    <g class="cookie-right">
+                        <!-- Main Right Wing Structure -->
+                        <path d="M 160,50 
+                                 C 210,48 255,95 265,140 
+                                 C 272,170 255,200 230,198 
+                                 C 210,196 198,176 182,148 
+                                 C 170,126 162,102 160,90 Z" 
+                              fill="#F3C488" />
+                        <!-- Subtle inner block shade (flat color, no gradients!) -->
+                        <path d="M 160,90 
+                                 C 178,112 196,124 216,130
+                                 C 220,145 232,165 248,175
+                                 C 238,185 228,192 220,191
+                                 C 200,189 185,160 172,135 Z" 
+                              fill="#DF9E53" />
+                        <!-- Bright outer flat crust highlight rim -->
+                        <path d="M 265,140 C 260,165 240,190 230,198" stroke="#FDE5C3" stroke-width="3" stroke-linecap="round" />
+                    </g>
+                </svg>
+            </div>
+
+            <!-- The Lucky Fortune Slip (Unveils from center) -->
+            <div id="fortune-slip" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[345px] max-w-[92vw] bg-[#FAF8F5] text-neutral-800 rounded-xl py-5 px-6 glow-paper border-t-[8px] border-amber-500 border-x border-b border-amber-200 z-20 flex flex-col justify-between select-none">
+                
+                <!-- Inner clean frame border -->
+                <div class="absolute inset-1.5 border border-dashed border-amber-800/10 rounded-lg pointer-events-none"></div>
+
+                <!-- Slip Header -->
+                <div class="flex justify-between items-center text-[10px] text-amber-800/80 font-black uppercase tracking-widest border-b border-amber-800/10 pb-2 z-10">
+                    <span id="slip-category-label">🍀 GENERAL LUCK</span>
+                    <span id="slip-date">2026.07.11</span>
+                </div>
+
+                <!-- Main fortune quote & details -->
+                <div class="my-5 text-center px-1 z-10 relative">
+                    <span class="absolute -top-3 left-0 text-amber-500/10 text-5xl serif-font font-black leading-none">“</span>
+                    <p id="fortune-quote" class="serif-font text-base md:text-lg font-bold text-neutral-800 leading-relaxed min-h-[4.5rem] flex items-center justify-center px-2">
+                        바람이 불지 않을 때 바람개비를 돌리는 방법은, 앞으로 먼저 힘차게 달려나가는 것입니다.
+                    </p>
+                    <span class="absolute -bottom-7 right-0 text-amber-500/10 text-5xl serif-font font-black leading-none">”</span>
+                </div>
+
+                <!-- Fortune Indicators -->
+                <div class="border-t border-dashed border-amber-800/20 pt-4 grid grid-cols-3 gap-1.5 text-center text-xs z-10">
+                    <div class="bg-amber-500/5 rounded-lg p-2 border border-amber-200">
+                        <span class="text-[9px] font-bold text-amber-800/60 block mb-0.5">행운의 숫자</span>
+                        <span id="lucky-number" class="font-black text-amber-900 text-sm">7</span>
+                    </div>
+                    <div class="bg-amber-500/5 rounded-lg p-2 border border-amber-200">
+                        <span class="text-[9px] font-bold text-amber-800/60 block mb-0.5">행운의 색상</span>
+                        <span id="lucky-color" class="font-black text-amber-900 text-xs truncate block mt-0.5">골드</span>
+                    </div>
+                    <div class="bg-amber-500/5 rounded-lg p-2 border border-amber-200">
+                        <span class="text-[9px] font-bold text-amber-800/60 block mb-0.5">행운의 아이템</span>
+                        <span id="lucky-item" class="font-black text-amber-900 text-xs leading-tight truncate block mt-0.5">스마트폰</span>
+                    </div>
+                </div>
+
+                <!-- Star Gauge -->
+                <div class="mt-4 flex items-center justify-between text-xs border-t border-amber-850/10 pt-2.5 z-10">
+                    <span class="text-amber-800/70 font-bold">오늘의 종합 행운 지수</span>
+                    <div id="luck-stars" class="text-amber-500 space-x-0.5 text-[10px]">
+                        <i class="fa-solid fa-star"></i>
+                        <i class="fa-solid fa-star"></i>
+                        <i class="fa-solid fa-star"></i>
+                        <i class="fa-solid fa-star"></i>
+                        <i class="fa-regular fa-star"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interactive Buttons & Controls -->
+        <div class="w-full flex flex-col items-center mt-3 z-10 px-4" id="action-area">
+            
+            <!-- Tap Instruction Tooltip -->
+            <p id="tap-instruction" class="text-amber-300/90 text-xs md:text-sm font-bold tracking-wide flex items-center gap-2 mb-4 animate-pulse">
+                <i class="fa-solid fa-hand-pointer text-sm"></i> 포춘쿠키를 누르면 아그작! 소리와 함께 갈라집니다.
+            </p>
+
+            <!-- Reset, Share, and Save Options (Fully visible upon crack) -->
+            <div id="opened-options" class="hidden w-full max-w-sm space-y-3 transition-all duration-300">
+                
+                <!-- NEW SAVE/LOCK BUTTON -->
+                <button id="save-btn" onclick="toggleSaveCurrentFortune()" class="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold py-3.5 px-5 rounded-2xl shadow-lg transition duration-200 flex items-center justify-center space-x-2 border border-indigo-500/30">
+                    <i class="fa-solid fa-thumbtack"></i>
+                    <span id="save-btn-text" class="text-sm">📌 이 운세를 이 카테고리에 고정 저장</span>
+                </button>
+
+                <div class="flex flex-col sm:flex-row gap-2.5">
+                    <!-- RESET BUTTON ("행운 다시 돌리기") -->
+                    <button onclick="resetCookieState()" class="flex-1 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black py-3.5 px-5 rounded-2xl shadow-xl transition duration-200 flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-rotate-right text-base"></i>
+                        <span class="text-sm tracking-tight">행운 다시 돌리기</span>
+                    </button>
+
+                    <!-- Share Button -->
+                    <button onclick="shareFortune()" class="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 active:scale-95 text-slate-200 font-bold py-3.5 px-5 rounded-2xl transition duration-200 flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i>
+                        <span class="text-sm">행운 전하기</span>
+                    </button>
+                </div>
+                <p class="text-center text-[10px] text-slate-500 mt-2">
+                    ※ 고정 저장하면 앞으로 해당 카테고리 탭을 누를 때 무조건 이 운세만 나오게 됩니다!
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: History Logs -->
+    <div id="history-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center z-50 p-4 transition-all duration-300 opacity-0">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+            <!-- Header -->
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                <div class="flex items-center space-x-2.5">
+                    <i class="fa-solid fa-bookmark text-amber-400 text-lg"></i>
+                    <h2 class="text-base font-bold text-slate-100">나의 행운 보관함</h2>
+                </div>
+                <button onclick="toggleHistoryModal(false)" class="text-slate-400 hover:text-slate-100 p-2 hover:bg-slate-800 rounded-xl transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Content Area -->
+            <div id="history-list" class="p-4 overflow-y-auto space-y-3 flex-grow max-h-[60vh]">
+                <!-- Fallback Empty State -->
+                <div id="history-empty" class="text-center py-14 text-slate-500">
+                    <i class="fa-solid fa-cookie-bite text-4xl mb-3 text-slate-700"></i>
+                    <p class="text-sm font-semibold">보관함이 비어 있습니다</p>
+                    <p class="text-xs mt-1 text-slate-600">포춘쿠키를 깨서 오늘 하루 행운을 수집해 보관하세요!</p>
+                </div>
+            </div>
+
+            <!-- Footer Action -->
+            <div class="p-4 border-t border-slate-800 bg-slate-900/50 flex justify-between items-center text-xs text-slate-400">
+                <span>모은 행운 <strong id="history-count" class="text-amber-400 font-bold">0</strong>개</span>
+                <button onclick="clearHistory()" class="text-rose-400 hover:text-rose-300 font-bold flex items-center space-x-1.5 hover:bg-rose-500/10 px-3 py-2 rounded-xl transition">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>모두 비우기</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Toast Box -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-800 text-amber-200 px-5 py-3 rounded-xl shadow-2xl z-50 flex items-center space-x-3 transition-all duration-300 transform translate-y-20 opacity-0 pointer-events-none">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toast-message" class="text-xs md:text-sm font-bold text-slate-100">복사 완료!</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full text-center py-5 border-t border-slate-900 z-10 text-[10px] text-slate-600 flex flex-col space-y-1">
+        <p>© 2026 Golden Cookie. All Rights Reserved.</p>
+        <p class="text-slate-700">운세 결과는 가벼운 위트와 긍정적인 하루를 돕는 기분 좋은 조언입니다.</p>
+    </footer>
+
+    <script>
+        // Massive, diverse Fortune Database containing 25+ unique items for each category
+        const FORTUNE_DATABASE = {
+            all: [
+                { quote: "바람이 불지 않을 때 바람개비를 돌리는 방법은, 앞으로 힘차게 먼저 달려나가는 것입니다.", item: "가벼운 조깅화", color: "에메랄드 그린", number: 7, stars: 5 },
+                { quote: "복잡하게 꼬인 실타래를 푸는 유일한 열쇠는, 천천히 하나씩 풀어가는 조바심 없는 마음입니다.", item: "둥근 머그컵", color: "크림 화이트", number: 18, stars: 4 },
+                { quote: "가장 맑은 공기는 가장 높은 언덕 정상에서 불어옵니다. 잠시 시선을 높이 두어 보세요.", item: "선글라스", color: "클래식 네이비", number: 3, stars: 4 },
+                { quote: "예상치 못한 정류장에서 내리더라도 낙심하지 마세요. 뜻밖의 즐거움이 그 골목길에 숨어 있습니다.", item: "책갈피", color: "머스타드 옐로우", number: 24, stars: 5 },
+                { quote: "오늘은 백 마디 현란한 말보다 한 걸음 물러나서 상대를 묵묵히 경청하는 것이 완벽한 하루를 만듭니다.", item: "다이어리", color: "차콜 그레이", number: 9, stars: 4 },
+                { quote: "오랫동안 굳게 닫혀 있던 문이 소리 없이 열릴 징조입니다. 긴장을 풀고 편안한 발걸음으로 나아가세요.", item: "황동 열쇠고리", color: "올리브 카키", number: 88, stars: 5 },
+                { quote: "아주 미미해 보이던 작은 노력이 쌓여 견고한 결과를 도출합니다. 포기하지 말고 한 발자국만 더 가보세요.", item: "미니 선풍기", color: "라벤더", number: 12, stars: 4 },
+                { quote: "어두운 밤하늘일수록 별들은 더욱 밝게 제 자리를 빛내는 법입니다. 스스로를 의심치 마십시오.", item: "작은 촛불", color: "딥 블루", number: 55, stars: 5 },
+                { quote: "오늘은 마음에 쌓인 묵은 먼지를 털어내기 아주 훌륭한 타이밍입니다. 가벼운 환기를 즐겨보세요.", item: "수건", color: "소프트 핑크", number: 14, stars: 4 },
+                { quote: "나를 둘러싼 급격한 변화를 두려워하지 말고, 서핑을 즐기는 서퍼처럼 파도의 리듬을 타보세요.", item: "방수 팩", color: "민트 그린", number: 31, stars: 5 },
+                { quote: "생각보다 해결책은 복잡한 곳이 아닌 가장 일상적인 대화나 평범한 습관 속에 숨겨져 있습니다.", item: "메모장", color: "샌드 베이지", number: 22, stars: 4 },
+                { quote: "눈앞의 이익을 탐하기보다 길을 닦아놓는 것에 힘쓰면, 이내 거대한 보상들이 저절로 찾아옵니다.", item: "우산", color: "스카이 블루", number: 40, stars: 4 },
+                { quote: "어제의 일로 너무 애태우지 마세요. 이미 강물은 흘러갔고 새로운 맑은 물이 굽이쳐 다가오고 있습니다.", item: "손수건", color: "아이보리", number: 19, stars: 5 },
+                { quote: "가장 훌륭한 복수는 타인에게 날카롭게 맞서는 것이 아닌, 자신이 더욱 완벽히 행복해지는 일입니다.", item: "립밤", color: "체리 로즈", number: 8, stars: 4 },
+                { quote: "가장 중요한 판단을 내리기 전에 우선 따뜻한 차 한 잔을 비우며 호흡을 가다듬어 보시기 바랍니다.", item: "녹차 티백", color: "포레스트 그린", number: 66, stars: 5 },
+                { quote: "사소한 친절이 나비효과를 일으켜 거대한 행운의 부메랑이 되어 당신의 품으로 되돌아옵니다.", item: "초콜릿", color: "카카오 브라운", number: 15, stars: 5 },
+                { quote: "인내의 시간은 언제나 지독하게 쓰고 지루하지만, 그 열매는 그 어떤 사탕보다 달콤할 것입니다.", item: "손톱깎이", color: "샤인 실버", number: 2, stars: 4 },
+                { quote: "남들의 속도를 보며 조급해할 필요가 전혀 없습니다. 당신의 꽃은 당신만의 소중한 계절에 만개합니다.", item: "화분", color: "테라코타 오렌지", number: 17, stars: 5 },
+                { quote: "과감하게 선을 긋고 거절하는 태도가 때로는 나 자신뿐만 아니라 관계의 건강함까지도 지켜줍니다.", item: "볼펜", color: "매트 블랙", number: 50, stars: 4 },
+                { quote: "세상은 당신의 용기에 즉시 화답할 준비가 되어 있습니다. 마음속에만 품어온 생각을 꺼내놓으세요.", item: "노트북", color: "메탈릭 그레이", number: 82, stars: 5 },
+                { quote: "단호하지만 부드러운 눈빛이 모든 오해와 불신을 해소하는 최고의 설득 도구이자 열쇠가 됩니다.", item: "안경천", color: "로얄 퍼플", number: 93, stars: 4 },
+                { quote: "가장 빛나는 진실은 단순함에 있습니다. 고민을 한 겹 덜어내면 최선의 정답이 즉시 떠오를 것입니다.", item: "수첩", color: "페일 옐로우", number: 11, stars: 4 },
+                { quote: "먼 훗날 돌이켜보면 오늘의 작고 초라해 보였던 걸음걸이가 거대한 산을 넘은 위대한 시발점이었음을 안다.", item: "손목시계", color: "다크 골드", number: 73, stars: 5 },
+                { quote: "오늘은 내면의 호기심에 적극 귀 기울여 보세요. 이끌리는 대로 들어간 서점에서 기적의 해답을 만납니다.", item: "소설책", color: "브라운 리프", number: 6, stars: 4 },
+                { quote: "당신은 이미 생각보다 훨씬 멋지고 단단하며 가치 있는 보석입니다. 스스로 깎아내리지 마세요.", item: "거울", color: "크리스탈 클리어", number: 99, stars: 5 }
+            ],
+            love: [
+                { quote: "가장 가까이 머무는 소중한 사람에게 따뜻하고 촉촉한 위로의 한마디를 먼저 다정히 건네주세요.", item: "아메리카노", color: "코랄 핑크", number: 2, stars: 5 },
+                { quote: "사랑은 우람한 숲을 한꺼번에 가꾸는 일이 아닌, 비 맞은 작은 화초에 물을 살짝 주는 일입니다.", item: "접이식 우산", color: "루비 레드", number: 14, stars: 4 },
+                { quote: "뜻밖의 설렘이 기분 좋은 떨림을 안고 찾아옵니다. 굳게 닫은 마음의 문빗장을 느슨히 풀어놓으세요.", item: "섬유 유연제", color: "라벤더 소프트", number: 11, stars: 5 },
+                { quote: "상대의 굳은 마음을 억지로 열려 들지 말고, 내 마음의 정원을 가꾸며 향기가 먼저 스며들게 하세요.", item: "룸 스프레이", color: "스카이 BLUE", number: 5, stars: 4 },
+                { quote: "진심은 언제나 요란하지 않고 은은한 파동으로 결국 깊숙하게 상대의 가슴속 깊이 안착할 것입니다.", item: "손편지", color: "베이비 핑크", number: 22, stars: 4 },
+                { quote: "오늘은 말보다 가벼운 미소와 따뜻한 차 한 잔을 조용히 건네주는 깊은 배려가 만점 짜리 호감을 삽니다.", item: "허브티", color: "모카 브라운", number: 27, stars: 5 },
+                { quote: "새로운 우연이 인연의 씨앗이 되는 기분 좋은 날입니다. 모르는 사람에게도 가벼운 배려를 건네세요.", item: "사탕 한 알", color: "애프리콧 옐로우", number: 33, stars: 4 },
+                { quote: "오래 잊고 지냈던 그리운 친구나 전 연인으로부터 사소한 연락이 찾아와 아련한 추억을 상기시킵니다.", item: "엽서", color: "세피아 톤", number: 9, stars: 4 },
+                { quote: "상대방의 약점을 굳이 꼬집기보다 넉넉한 품으로 감싸 안을 때, 비로소 진정한 존경과 깊은 애정이 시작됩니다.", item: "카디건", color: "웜 화이트", number: 45, stars: 5 },
+                { quote: "사랑하는 이와 가볍게 걷는 산책길에서 소소하지만 영원히 기억될 아름다운 깊은 대화를 나누게 됩니다.", item: "러닝슈즈", color: "포레스트 올리브", number: 8, stars: 5 },
+                { quote: "상대방의 가치관을 존중해 주고 고개를 조용히 끄덕여주는 행동이 열 마디 변명보다 강력한 호감이 됩니다.", item: "안경", color: "로즈 골드", number: 13, stars: 4 },
+                { quote: "혼자만의 방에 갇혀 지내기에는 오늘의 따스한 햇살이 아깝습니다. 가볍게 시내 구경이라도 다녀오세요.", item: "가방", color: "카멜 베이지", number: 51, stars: 4 },
+                { quote: "고개를 살짝 갸웃거리며 미소를 짓는 아주 사소한 제스처 하나가 얼어붙은 상대의 장벽을 부숩니다.", item: "헤어핀", color: "펄 화이트", number: 3, stars: 5 },
+                { quote: "약간의 공백기는 오히려 서로를 향한 간절함을 키워주는 건강한 비타민이자 마법의 윤활제 역할을 합니다.", item: "비타민 음료", color: "옐로우 비비드", number: 72, stars: 4 },
+                { quote: "연애에도 적절한 타이밍과 템포가 있는 법입니다. 상대의 보조에 맞춰 조용히 보조를 맞추어 가세요.", item: "헤드폰", color: "차콜 그레이", number: 16, stars: 4 },
+                { quote: "소중한 관계를 지속하게 돕는 핵심 원동력은 화려한 이벤트가 아니라 일상의 시답잖은 수다들입니다.", item: "수분크림", color: "클리어 민트", number: 60, stars: 5 },
+                { quote: "밀고 당기는 계산적인 전략은 다 지워버리세요. 있는 그대로 다정함을 드러내는 정공법이 최선입니다.", item: "향수", color: "머스크 투명", number: 10, stars: 5 },
+                { quote: "과거에 얽매여 새로운 인연의 발걸음을 막지 마세요. 더 나은 내일이 이미 눈앞에서 손을 흔듭니다.", item: "키홀더", color: "다크 실버", number: 34, stars: 4 },
+                { quote: "상대가 건넨 가벼운 조언 한마디는 당신의 결점을 욕하려는 게 아니라 마음 깊은 사랑의 또 다른 언어입니다.", item: "손수건", color: "스노우 크림", number: 81, stars: 4 },
+                { quote: "서로에게 우산이 되어줄 준비가 되었군요. 폭풍우가 치는 험난한 고개도 두 손을 꼭 잡으면 그저 산책길입니다.", item: "페어링 반지", color: "플래티넘 실버", number: 77, stars: 5 },
+                { quote: "사랑은 내 자유를 구속당하는 구속이 아니라, 더 깊고 따뜻한 안식처를 서로 얻는 축복임을 기억하세요.", item: "액자", color: "원목 내추럴", number: 21, stars: 5 },
+                { quote: "기념일이 아니어도 가벼운 서프라이즈 꽃 한 송이가 차가워진 집 안의 온도를 단번에 화사하게 돌립니다.", item: "프리지아 한 송이", color: "레몬 옐로우", number: 4, stars: 5 },
+                { quote: "질투하는 지독한 불길은 가슴을 검게 태우기 마련입니다. 단단히 상대방을 믿고 고요한 여유를 지켜가세요.", item: "북마크", color: "올리브 그린", number: 19, stars: 4 },
+                { quote: "그동안 마음에 담아두었지만 수줍어 차마 고백하지 못했던 말을 전할 절호의 맑은 기회가 찾아왔습니다.", item: "카드지갑", color: "베이비 블루", number: 85, stars: 5 },
+                { quote: "인연은 억지로 애타게 쫓아간다고 잡히는 게 아닙니다. 가만히 빛을 내는 등대가 되면 배는 저절로 정박합니다.", item: "핸드크림", color: "우디 진저", number: 90, stars: 5 }
+            ],
+            wealth: [
+                { quote: "오늘은 무턱대고 쥐려 하기보다 가볍게 지갑을 여는 지혜로운 소비가 뜻밖의 인맥적 이익으로 귀환합니다.", item: "가죽 에센스", color: "딥 카카오", number: 8, stars: 4 },
+                { quote: "눈앞의 가벼운 이익이나 공짜 정보에 성급하게 발을 담그지 말고, 더 크고 본질적인 숲의 흐름을 보십시오.", item: "메모 패드", color: "포레스트 그린", number: 50, stars: 4 },
+                { quote: "동쪽 방향에서 방문한 귀인이 오랜 사업적 교착 상태를 뚫어줄 아주 결정적인 꿀 정보를 전해줄 수 있습니다.", item: "명함 케이스", color: "브러시드 실버", number: 36, stars: 5 },
+                { quote: "고정지출 중 불필요하게 낭비되는 구멍 하나를 확실하게 틀어막는 날입니다. 그것이 자산 축적의 기초입니다.", item: "스마트폰 가계부", color: "미드나잇 블루", number: 1, stars: 4 },
+                { quote: "마치 메마른 대지에 마침내 봄비가 대지를 적시듯, 막혔던 자금줄이 소리 없이 돌아설 긍정적 징조입니다.", item: "기념 주화", color: "앤티크 골드", number: 77, stars: 5 },
+                { quote: "사소한 수수료나 흘려보내는 거스름돈조차 소홀히 대하지 마세요. 모든 큰 바다는 빗방울에서 시작됩니다.", item: "동전지갑", color: "탄 브라운", number: 5, stars: 4 },
+                { quote: "오늘은 남에게 돈을 함부로 빌려주거나 빚보증을 서는 등의 어리석은 거래는 절대로 칼로 끊듯 삼가세요.", item: "클립", color: "실버", number: 12, stars: 4 },
+                { quote: "과거에 묻어둔 묵은 자산이나 오래된 청약, 잊고 살던 소액 적금통장에서 보너스 같은 이득을 회수합니다.", item: "도장", color: "아이보리 샌드", number: 99, stars: 5 },
+                { quote: "투자 포트폴리오를 대대적으로 재점검할 환상적인 시기입니다. 겉보기에만 화려한 투기는 이제 정리하십시오.", item: "모눈종이 노트", color: "스틸 블루", number: 44, stars: 4 },
+                { quote: "성급하게 매매 결정을 내리며 흔들리지 말고 한 발 물러서 시장 상황을 지켜보는 것이 내 자산을 지키는 비법입니다.", item: "보온 보틀", color: "카키 마트", number: 26, stars: 4 },
+                { quote: "작은 텃밭에 뿌려둔 정직한 씨앗들이 마침내 싹을 틔우니, 드디어 고생한 만큼의 결실을 보기 시작합니다.", item: "화분 삽", color: "에코 그린", number: 18, stars: 5 },
+                { quote: "오늘 복권을 구입하거나 경품 이벤트에 재미로 참여해 보세요. 상상치 못한 소소한 당첨 행운이 있습니다.", item: "복권", color: "오렌지 팝", number: 7, stars: 5 },
+                { quote: "횡재수가 잠시 비치지만 지나친 탐욕은 오히려 화를 부를 수 있으니 적당한 타협점에서 이익을 굳히세요.", item: "클립 홀더", color: "골드 라인", number: 68, stars: 4 },
+                { quote: "가족이나 오랜 절친과의 진솔한 자산 고민 상담을 통해 해결의 아주 귀중한 열쇠를 찾게 됩니다.", item: "스탠드 조명", color: "웜 옐로우", number: 13, stars: 4 },
+                { quote: "새로운 재정적 계약서를 작성할 때는 조항 하나까지 눈을 씻고 꼼꼼하게 따져보셔야 손실을 철저히 막습니다.", item: "돋보기", color: "크리스탈 앰버", number: 23, stars: 5 },
+                { quote: "당장은 아주 쓰디쓰고 가혹해 보이는 소비 통제가 다가오는 연말에 기쁨 가득한 호사로 완벽히 되돌아옵니다.", item: "머그잔", color: "세라믹 화이트", number: 89, stars: 4 },
+                { quote: "당신의 정직하고 성실한 실적을 눈여겨보던 윗사람이 마침내 보너스나 연봉 인상의 신호를 살짝 보냅니다.", item: "만년필", color: "플래티넘 네이비", number: 30, stars: 5 },
+                { quote: "물건을 살 때 충동적으로 '지름신'의 유혹에 휩쓸리기 쉽습니다. 세 번 심호흡을 한 뒤 창을 닫으세요.", item: "안대", color: "피치", number: 2, stars: 4 },
+                { quote: "오늘은 낡고 헤진 지갑 내부를 깔끔히 영수증 정리하며 지갑의 기운을 밝고 가볍게 맑게 정돈해 주세요.", item: "지갑 가공 클리너", color: "크림", number: 88, stars: 5 },
+                { quote: "인내심을 길러 가치를 꾸준히 모아간다면 머지않은 미래에 훌륭한 나만의 보금자리를 가질 수 있을 것입니다.", item: "열쇠 모양 펜", color: "메탈 브론즈", number: 15, stars: 5 },
+                { quote: "공부하고 공부할수록 부의 눈높이는 점점 올라갑니다. 경제 서적이나 관련 뉴스를 평소보다 정독해 보세요.", item: "경제 잡지", color: "진그레이", number: 61, stars: 4 },
+                { quote: "주변의 불필요한 공짜 점심이나 회식 제안은 예의 바르게 사절하는 게 소중한 비상금 누수를 수비하는 법입니다.", item: "손거울", color: "애쉬 베이지", number: 40, stars: 4 },
+                { quote: "기부나 봉사를 통해 선한 공덕을 먼저 쌓으면 그만큼 금전적 운의 그릇이 두 배로 탄탄해지고 깊어집니다.", item: "저금통", color: "파스텔 코랄", number: 70, stars: 5 },
+                { quote: "그동안 망설이던 합리적 부동산이나 우량주 등 정직한 대안이 눈에 들어오기 시작하니 기회를 기민하게 낚아채세요.", item: "태블릿", color: "실버 그레이", number: 55, stars: 5 },
+                { quote: "돈을 단순히 쫓는 추격자가 되지 말고 돈이 내 주위에 알아서 편하게 머물고 싶어 하는 매력적인 화단이 되십시오.", item: "디퓨저", color: "포레스트 버터", number: 83, stars: 5 }
+            ],
+            career: [
+                { quote: "모든 것을 완벽하게 해내야 한다는 지나친 부담과 강박 대신, 일단 과감하게 한 발자국 떼고 수정해 나가세요.", item: "수정테이프", color: "매트 실버", number: 99, stars: 5 },
+                { quote: "까다로운 과제나 시련이 당장 앞길에 떨어지더라도 피하지 마세요. 그것을 기회로 돌파해 내면 한 단계 도약합니다.", item: "안티 블루라이트 안경", color: "다크 애쉬", number: 44, stars: 4 },
+                { quote: "함께 고생하는 프로젝트 팀원들에게 격려와 응원을 나누면 시너지 효과가 배가되어 기가 막힌 성과로 연결됩니다.", item: "박스 테이프", color: "오렌지 무드", number: 15, stars: 5 },
+                { quote: "아주 우연히 번뜩이는 참신한 번개가 스치는 날입니다. 가벼운 한 줄 낙서 속 생각들이 거대한 황금 이정표가 됩니다.", item: "스케치북", color: "카나리아 옐로우", number: 33, stars: 4 },
+                { quote: "산 정상을 단번에 급히 점령하려 성급해지기보다, 내 발밑의 단단한 한 계단에만 온전히 고도로 집중해 보십시오.", item: "마우스 패드", color: "보타닉 그린", number: 10, stars: 4 },
+                { quote: "그동안 쏟아부은 땀방울과 눈물겨운 인내를 상사나 파트너가 확실히 인정하고 박수갈채를 전할 기쁨 가득한 날입니다.", item: "명찰 홀더", color: "사파이어 블루", number: 25, stars: 5 },
+                { quote: "현재의 오랜 권태기나 직무적 무기력증은 더 높이 힘차게 뛰어오르기 위해 웅크리는 건강한 도약의 신호탄입니다.", item: "에스프레소 잔", color: "브라운 딥", number: 4, stars: 4 },
+                { quote: "과도한 욕심을 내어 모든 스케줄을 떠맡지 마세요. 업무 효율성이 쪼개져 실수가 나올 수 있으니 분배해야 합니다.", item: "스톱워치", color: "밀크 화이트", number: 30, stars: 4 },
+                { quote: "공과 사를 칼로 두부 자르듯 명확하고 똑 부러지게 조율하는 단호함이 오해와 감정 소모를 원천 차단해 줍니다.", item: "클립보드", color: "로얄 샌드", number: 88, stars: 5 },
+                { quote: "이직이나 독립, 새로운 부서 배치 등의 고민이 깊었다면 마침내 결단을 내릴 만큼 훌륭하고 귀중한 조력자를 만납니다.", item: "스마트 키", color: "메탈 실버", number: 71, stars: 5 },
+                { quote: "남들의 눈부신 성취나 외적인 성공에 기죽지 마세요. 그들도 보이지 않는 무대 뒤에서는 똑같이 방황하고 있습니다.", item: "귀마개", color: "파스텔 퍼플", number: 14, stars: 4 },
+                { quote: "프레젠테이션이나 제안서 작성 시 군더더기를 과감히 걷어내고 한 줄 요약에만 극도로 공을 들여 보십시오.", item: "레이저 포인터", color: "크림 화이트", number: 22, stars: 5 },
+                { quote: "지나치게 과열된 머리를 시원하게 달래줄 차분하고 짧은 낮잠이 오후의 비약적인 아이디어 생산성을 책임집니다.", item: "목베개", color: "올리브 모카", number: 6, stars: 4 },
+                { quote: "어려운 문제의 아주 기막힌 해법은 내 업무 영역 밖의 다른 업계 사람과 수다를 떨다가 유레카처럼 튀어나옵니다.", item: "텀블러 캐리어", color: "라떼 옐로우", number: 57, stars: 5 },
+                { quote: "계획은 최대한 구체적으로 시간 단위로 세분화해 놓는 것이 복잡한 마음과 조급함을 달래는 최선의 묘책입니다.", item: "플래너 수첩", color: "딥 카멜", number: 90, stars: 4 },
+                { quote: "자신의 실력과 노하우를 과시하려 장황히 무리하게 설명하지 마세요. 핵심적인 결과와 데이터 한 줄이 더 묵직합니다.", item: "USB 드라이브", color: "피치 스킨", number: 42, stars: 5 },
+                { quote: "오래 해결되지 않고 먼지만 쌓이던 까다로운 특허나 승인 건이 한순간에 원만하게 해결 국면에 도달합니다.", item: "결재 도장", color: "우드 카카오", number: 11, stars: 5 },
+                { quote: "당장 무의미하고 소모적으로 보이는 사소한 서류 정리가 곧 있을 거대한 감사나 상사 보고에서 당신을 구조합니다.", item: "파일 홀더", color: "레몬 민트", number: 73, stars: 4 },
+                { quote: "자신의 명확한 소신과 뚝심을 올곧게 지켜가십시오. 잠깐의 흔들림을 꿋꿋하게 이겨내면 영웅으로 빛납니다.", item: "배지", color: "매트 브론즈", number: 9, stars: 5 },
+                { quote: "과도하게 긴장해서 몸이 무겁군요. 어깨를 크게 으쓱이며 활기찬 전신 스트레칭을 3분 동안 실행해 주세요.", item: "텀블러", color: "아쿠아 블루", number: 38, stars: 4 },
+                { quote: "새로운 온라인 학습이나 자격증 획득을 시작하기 참 아름다운 시기입니다. 망설이지 말고 결제 버튼을 누르세요.", item: "북스탠드", color: "로얄 틸", number: 62, stars: 5 },
+                { quote: "오늘은 말실수가 생기기 지극히 쉬운 예민한 시기이니 결재나 보고 시 단어 필터링에 각별히 유의해 검토하세요.", item: "메모 점착지", color: "네온 핑크", number: 5, stars: 4 },
+                { quote: "기존의 전형적인 고정관념의 낡은 벽을 과감하게 깨부수세요. 조금은 무모해 보이던 시도가 기적의 길을 만듭니다.", item: "자", color: "아크릴 투명", number: 80, stars: 5 },
+                { quote: "팀의 소리 없는 훌륭한 구원투수이자 리더로서 조용하지만 확실한 든든한 등대로서의 가치를 무겁게 증명해 냅니다.", item: "커피 메이커", color: "소프트 에스프레소", number: 17, stars: 5 },
+                { quote: "당신이 꾸준히 키워가고 있는 전문지식의 튼튼한 나무는 이미 깊게 뿌리내려 그 누구도 쉽게 흔들 수 없습니다.", item: "노트북 스탠드", color: "미스틱 그레이", number: 51, stars: 5 }
+            ]
+        };
+
+        // State Management
+        let selectedCategory = 'all';
+        let isCracked = false;
+        let isShaking = false;
+        let currentFortune = null;
+        let history = [];
+        let savedFortunes = { all: null, love: null, wealth: null, career: null };
+
+        // Synthesize Crunching / Cracking ("Ag-jak!") Sound using Web Audio API
+        let audioCtx = null;
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        // Distinctly crunchy "ag-jak!" synthesizer
+        function playCrackSound() {
+            try {
+                const ctx = getAudioContext();
+                const now = ctx.currentTime;
+                
+                // Deep snap/pop frequency (The hard breaking snap)
+                const osc1 = ctx.createOscillator();
+                const gain1 = ctx.createGain();
+                osc1.type = 'triangle';
+                osc1.frequency.setValueAtTime(220, now);
+                osc1.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gain1.gain.setValueAtTime(0.4, now);
+                gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc1.connect(gain1);
+                gain1.connect(ctx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.15);
+
+                // High-frequency crunchy biscuit snaps (3 rapid crack bursts close to each other)
+                for (let i = 0; i < 3; i++) {
+                    const delay = i * 0.02;
+                    const osc2 = ctx.createOscillator();
+                    const gain2 = ctx.createGain();
+                    osc2.type = 'sawtooth';
+                    // High metallic wood crack sound
+                    osc2.frequency.setValueAtTime(900 + (i * 200), now + delay);
+                    osc2.frequency.exponentialRampToValueAtTime(100, now + delay + 0.05);
+                    gain2.gain.setValueAtTime(0.15, now + delay);
+                    gain2.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.05);
+                    osc2.connect(gain2);
+                    gain2.connect(ctx.destination);
+                    osc2.start(now + delay);
+                    osc2.stop(now + delay + 0.05);
+                }
+            } catch (e) {
+                console.log('Audio unsupported/muted: ', e);
+            }
+        }
+
+        // Soft rustic rustle tone
+        function playRustleSound() {
+            try {
+                const ctx = getAudioContext();
+                const now = ctx.currentTime;
+                
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.05);
+                osc.frequency.linearRampToValueAtTime(300, now + 0.12);
+                
+                gain.gain.setValueAtTime(0.04, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } catch (e) {
+                console.log('Audio error: ', e);
+            }
+        }
+
+        // Generates clean subtle starry backdrop
+        function generateStarrySky() {
+            const container = document.getElementById('stars-backdrop');
+            container.innerHTML = '';
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const starCount = Math.floor((width * height) / 25000);
+
+            for (let i = 0; i < starCount; i++) {
+                const star = document.createElement('div');
+                star.className = 'space-star';
+                const size = Math.random() * 2 + 1;
+                star.style.width = `${size}px`;
+                star.style.height = `${size}px`;
+                star.style.left = `${Math.random() * 100}%`;
+                star.style.top = `${Math.random() * 100}%`;
+                container.appendChild(star);
+            }
+        }
+
+        // Category toggle handling
+        function selectCategory(category) {
+            if (isCracked) return;
+            selectedCategory = category;
+            
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.className = "category-btn py-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 flex flex-col items-center justify-center transition-all";
+                if (btn.id === 'cat-love') btn.classList.add('hover:text-pink-300', 'hover:border-pink-500/30');
+                if (btn.id === 'cat-wealth') btn.classList.add('hover:text-emerald-300', 'hover:border-emerald-500/30');
+                if (btn.id === 'cat-career') btn.classList.add('hover:text-blue-300', 'hover:border-blue-500/30');
+            });
+
+            const activeBtn = document.getElementById(`cat-${category}`);
+            if (category === 'all') {
+                activeBtn.className = "category-btn py-3 rounded-xl border flex flex-col items-center justify-center transition-all bg-amber-500/20 border-amber-500/60 text-amber-200 shadow-lg";
+            } else if (category === 'love') {
+                activeBtn.className = "category-btn py-3 rounded-xl border flex flex-col items-center justify-center transition-all bg-pink-500/20 border-pink-500/60 text-pink-200 shadow-lg";
+            } else if (category === 'wealth') {
+                activeBtn.className = "category-btn py-3 rounded-xl border flex flex-col items-center justify-center transition-all bg-emerald-500/20 border-emerald-500/60 text-emerald-200 shadow-lg";
+            } else if (category === 'career') {
+                activeBtn.className = "category-btn py-3 rounded-xl border flex flex-col items-center justify-center transition-all bg-blue-500/20 border-blue-500/60 text-blue-200 shadow-lg";
+            }
+            playRustleSound();
+        }
+
+        // Trigger shake and then physically break
+        function crackCookie() {
+            if (isCracked) return;
+            
+            const interactiveEl = document.getElementById('cookie-interactive');
+
+            if (!isShaking) {
+                isShaking = true;
+                interactiveEl.classList.remove('animate-bob');
+                interactiveEl.classList.add('animate-shake');
+                playRustleSound();
+                
+                setTimeout(() => {
+                    interactiveEl.classList.remove('animate-shake');
+                    isShaking = false;
+                    performCrack();
+                }, 350);
+            }
+        }
+
+        // Break cookie open and reveal clean slip
+        function performCrack() {
+            isCracked = true;
+            const containerEl = document.getElementById('cookie-container');
+            const interactiveEl = document.getElementById('cookie-interactive');
+            const fortuneSlip = document.getElementById('fortune-slip');
+            const categorySelector = document.getElementById('category-selector');
+            const tapInstruction = document.getElementById('tap-instruction');
+            const openedOptions = document.getElementById('opened-options');
+            const introTexts = document.getElementById('intro-texts');
+
+            playCrackSound();
+
+            containerEl.classList.add('cracked');
+            interactiveEl.classList.remove('animate-bob');
+            
+            let rawFortune;
+            // CHECK IF SPECIFIC FORTUNE IS FIXED (SAVED) FOR THIS CATEGORY
+            if (savedFortunes[selectedCategory]) {
+                rawFortune = savedFortunes[selectedCategory];
+                showToast('📌 고정 저장된 오늘의 운세를 불러왔습니다.', 'success');
+            } else {
+                // Randomly select a fortune quote
+                const categoryPool = FORTUNE_DATABASE[selectedCategory];
+                const randomIndex = Math.floor(Math.random() * categoryPool.length);
+                rawFortune = categoryPool[randomIndex];
+            }
+            
+            const now = new Date();
+            currentFortune = {
+                ...rawFortune,
+                id: rawFortune.id || Date.now(),
+                category: selectedCategory,
+                dateString: `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
+            };
+
+            const categoryLabel = {
+                all: '🍀 GENERAL LUCK',
+                love: '💖 LOVE LUCK',
+                wealth: '💰 WEALTH LUCK',
+                career: '🚀 CAREER LUCK'
+            };
+            
+            document.getElementById('slip-category-label').innerText = categoryLabel[selectedCategory];
+            document.getElementById('slip-date').innerText = currentFortune.dateString;
+            document.getElementById('fortune-quote').innerText = currentFortune.quote;
+            document.getElementById('lucky-number').innerText = currentFortune.number;
+            document.getElementById('lucky-color').innerText = currentFortune.color;
+            document.getElementById('lucky-item').innerText = currentFortune.item;
+
+            // Render Stars inside slip
+            const starsContainer = document.getElementById('luck-stars');
+            starsContainer.innerHTML = '';
+            for (let i = 1; i <= 5; i++) {
+                const starIcon = document.createElement('i');
+                starIcon.className = i <= currentFortune.stars ? 'fa-solid fa-star' : 'fa-regular fa-star';
+                starsContainer.appendChild(starIcon);
+            }
+
+            // Save automatically inside history storage
+            saveFortuneToHistory(currentFortune);
+
+            // Update Save Button Text and styling to match status
+            updateSaveButtonUI();
+
+            // Pop out paper slip cleanly
+            setTimeout(() => {
+                fortuneSlip.classList.remove('hidden');
+                fortuneSlip.classList.add('animate-paper-emerge');
+                
+                triggerCelebrationConfetti();
+                
+                categorySelector.classList.add('opacity-10', 'pointer-events-none');
+                introTexts.classList.add('opacity-20');
+                tapInstruction.classList.add('hidden');
+                openedOptions.classList.remove('hidden');
+            }, 200);
+        }
+
+        // Celebrate Confetti
+        function triggerCelebrationConfetti() {
+            const count = 75;
+            const defaults = {
+                origin: { y: 0.55 },
+                colors: ['#f5cc98', '#e5a962', '#c17e3d', '#ffffff']
+            };
+
+            function fire(particleRatio, opts) {
+                confetti(Object.assign({}, defaults, opts, {
+                    particleCount: Math.floor(count * particleRatio)
+                }));
+            }
+
+            fire(0.25, { spread: 26, startVelocity: 40 });
+            fire(0.2, { spread: 60 });
+            fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+            fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.1 });
+        }
+
+        // Reset cookie to standard closed state instantly
+        function resetCookieState() {
+            if (!isCracked) return;
+
+            const containerEl = document.getElementById('cookie-container');
+            const interactiveEl = document.getElementById('cookie-interactive');
+            const fortuneSlip = document.getElementById('fortune-slip');
+            const categorySelector = document.getElementById('category-selector');
+            const tapInstruction = document.getElementById('tap-instruction');
+            const openedOptions = document.getElementById('opened-options');
+            const introTexts = document.getElementById('intro-texts');
+
+            playRustleSound();
+
+            isCracked = false;
+            currentFortune = null;
+
+            containerEl.classList.remove('cracked');
+            fortuneSlip.classList.remove('animate-paper-emerge');
+            fortuneSlip.classList.add('hidden');
+
+            categorySelector.classList.remove('opacity-10', 'pointer-events-none');
+            introTexts.classList.remove('opacity-20');
+            tapInstruction.classList.remove('hidden');
+            openedOptions.classList.add('hidden');
+
+            // Float animation resume
+            setTimeout(() => {
+                if (!isCracked) {
+                    interactiveEl.classList.add('animate-bob');
+                }
+            }, 500);
+            
+            showToast('새로운 바삭한 포춘쿠키가 준비되었습니다! 🥠', 'success');
+        }
+
+        // Save Current Fortune to override category
+        function toggleSaveCurrentFortune() {
+            if (!currentFortune) return;
+            const cat = selectedCategory;
+
+            if (savedFortunes[cat] && savedFortunes[cat].id === currentFortune.id) {
+                // If already saved, unsave it
+                savedFortunes[cat] = null;
+                showToast('고정 저장이 해제되었습니다. 이제 무작위 운세가 나옵니다.', 'success');
+            } else {
+                // Pin/Save it
+                savedFortunes[cat] = currentFortune;
+                showToast('이 카테고리의 오늘의 전용 운세로 고정되었습니다! 📌', 'success');
+            }
+
+            try {
+                localStorage.setItem('golden_cookie_saved', JSON.stringify(savedFortunes));
+            } catch (e) {
+                console.error(e);
+            }
+
+            updateSaveButtonUI();
+            updateCategoryBadges();
+            playRustleSound();
+        }
+
+        // Update CSS/Text for save button
+        function updateSaveButtonUI() {
+            const saveBtn = document.getElementById('save-btn');
+            const saveBtnText = document.getElementById('save-btn-text');
+            if (!saveBtn || !saveBtnText) return;
+
+            const cat = selectedCategory;
+            const icon = saveBtn.querySelector('i');
+
+            if (savedFortunes[cat] && currentFortune && savedFortunes[cat].id === currentFortune.id) {
+                // Already saved state
+                saveBtn.className = "w-full bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition duration-200 flex items-center justify-center space-x-2 border border-rose-500/20";
+                saveBtnText.innerText = "🔓 이 카테고리 고정 저장 해제하기";
+                if (icon) icon.className = "fa-solid fa-unlock";
+            } else {
+                // Unsaved/Initial state
+                saveBtn.className = "w-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition duration-200 flex items-center justify-center space-x-2 border border-indigo-500/20";
+                saveBtnText.innerText = "📌 이 운세를 이 카테고리에 고정 저장";
+                if (icon) icon.className = "fa-solid fa-thumbtack";
+            }
+        }
+
+        // Add Pin Indicator to Category buttons if saved
+        function updateCategoryBadges() {
+            const categories = ['all', 'love', 'wealth', 'career'];
+            categories.forEach(cat => {
+                const badgeId = `badge-${cat}`;
+                let badgeEl = document.getElementById(badgeId);
+                
+                if (!badgeEl) {
+                    const btn = document.getElementById(`cat-${cat}`);
+                    if (btn) {
+                        badgeEl = document.createElement('span');
+                        badgeEl.id = badgeId;
+                        badgeEl.className = 'text-[9px] text-yellow-400 font-extrabold ml-1';
+                        btn.querySelector('span').after(badgeEl);
+                    }
+                }
+                
+                if (badgeEl) {
+                    if (savedFortunes[cat]) {
+                        badgeEl.innerText = ' 📌';
+                    } else {
+                        badgeEl.innerText = '';
+                    }
+                }
+            });
+        }
+
+        // Share text to clipboard
+        function shareFortune() {
+            if (!currentFortune) return;
+
+            const categoryEmoji = {
+                all: '🍀 [종합운]',
+                love: '💖 [연애운]',
+                wealth: '💰 [재물운]',
+                career: '🚀 [성공운]'
+            };
+
+            const shareText = `🥠 오늘의 포춘쿠키가 도착했습니다! 🥠
+
+${categoryEmoji[currentFortune.category]} 나를 위한 오늘의 조언:
+"${currentFortune.quote}"
+
+🌈 행운의 비결 가이드:
+• 숫자: ${currentFortune.number}
+• 색상: ${currentFortune.color}
+• 아이템: ${currentFortune.item}
+
+오늘의 포춘쿠키 오늘의 행운 사이트에서 직접 쿠키를 깨보세요! ✨`;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = shareText;
+            textarea.style.position = 'fixed';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showToast('오늘의 행운이 클립보드에 복사되었습니다!', 'success');
+                } else {
+                    showToast('복사에 실패했습니다.', 'error');
+                }
+            } catch (err) {
+                showToast('클립보드 복사 오류가 발생했습니다.', 'error');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // Toast Notifications
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check text-emerald-400' : 'fa-triangle-exclamation text-rose-400'} text-lg"></i> <span class="text-xs font-bold text-slate-100">${message}</span>`;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        // History Modal Toggling
+        function toggleHistoryModal(show) {
+            const modal = document.getElementById('history-modal');
+            if (show) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                }, 15);
+                playRustleSound();
+            } else {
+                modal.classList.add('opacity-0');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }, 300);
+            }
+        }
+
+        // Local Storage Sync
+        function loadHistoryFromStorage() {
+            try {
+                const stored = localStorage.getItem('golden_cookie_fortunes');
+                if (stored) {
+                    history = JSON.parse(stored);
+                } else {
+                    history = [];
+                }
+            } catch (e) {
+                history = [];
+            }
+            updateHistoryUI();
+        }
+
+        // Load Pin configurations
+        function loadSavedFortunes() {
+            try {
+                const storedSaved = localStorage.getItem('golden_cookie_saved');
+                if (storedSaved) {
+                    savedFortunes = JSON.parse(storedSaved);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            updateCategoryBadges();
+        }
+
+        function saveFortuneToHistory(fortune) {
+            history.unshift(fortune);
+            if (history.length > 50) {
+                history.pop();
+            }
+            try {
+                localStorage.setItem('golden_cookie_fortunes', JSON.stringify(history));
+            } catch (e) {
+                console.error('LocalStorage error: ', e);
+            }
+            updateHistoryUI();
+        }
+
+        function clearHistory() {
+            history = [];
+            try {
+                localStorage.removeItem('golden_cookie_fortunes');
+            } catch (e) {}
+            showToast('행운 보관함을 성공적으로 비웠습니다.', 'success');
+            updateHistoryUI();
+        }
+
+        // Update list UI
+        function updateHistoryUI() {
+            const listEl = document.getElementById('history-list');
+            const countEl = document.getElementById('history-count');
+            const emptyEl = document.getElementById('history-empty');
+
+            countEl.innerText = history.length;
+            listEl.innerHTML = '';
+            listEl.appendChild(emptyEl);
+
+            if (history.length > 0) {
+                emptyEl.classList.add('hidden');
+                
+                const categoryEmoji = {
+                    all: '🍀 종합운',
+                    love: '💖 연애운',
+                    wealth: '💰 재물운',
+                    career: '🚀 성공운'
+                };
+
+                const categoryColors = {
+                    all: 'text-amber-400 border-amber-500/20 bg-amber-500/10',
+                    love: 'text-pink-400 border-pink-500/20 bg-pink-500/10',
+                    wealth: 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10',
+                    career: 'text-blue-400 border-blue-500/20 bg-blue-500/10'
+                };
+
+                history.forEach(item => {
+                    const row = document.createElement('div');
+                    row.className = "bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 flex flex-col space-y-2 relative";
+
+                    row.innerHTML = `
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="px-2.5 py-0.5 rounded-full border ${categoryColors[item.category]} font-bold text-[9px]">
+                                ${categoryEmoji[item.category] || '🍀 운세'}
+                            </span>
+                            <span class="text-slate-500 font-medium text-[9px]">${item.dateString}</span>
+                        </div>
+                        <p class="text-slate-100 text-sm serif-font leading-relaxed font-bold">
+                            "${item.quote}"
+                        </p>
+                        <div class="grid grid-cols-3 gap-1 text-center text-[10px] border-t border-slate-700/50 pt-2 text-slate-400">
+                            <div><span class="text-slate-500 block">숫자</span><strong class="text-slate-200 font-bold">${item.number}</strong></div>
+                            <div><span class="text-slate-500 block">색상</span><strong class="text-slate-200 font-bold">${item.color}</strong></div>
+                            <div class="truncate"><span class="text-slate-500 block">아이템</span><strong class="text-slate-200 font-bold block truncate">${item.item}</strong></div>
+                        </div>
+                    `;
+                    listEl.appendChild(row);
+                });
+            } else {
+                emptyEl.classList.remove('hidden');
+            }
+        }
+
+        // Initialization
+        window.onload = function() {
+            generateStarrySky();
+            loadHistoryFromStorage();
+            loadSavedFortunes();
+            
+            window.addEventListener('resize', generateStarrySky);
+        }
+    </script>
+</body>
+</html>
